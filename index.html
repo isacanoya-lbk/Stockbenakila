@@ -6,6 +6,7 @@
 <title>Stock Tabac-Presse</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <style>
   :root{
     --bg:#12151a;
@@ -61,6 +62,9 @@
   .scanner-view{position:relative;width:100%;aspect-ratio:4/3;background:#05070a;display:flex;align-items:center;justify-content:center;}
   .scanner-view video{width:100%;height:100%;object-fit:cover;display:none;}
   .scanner-view.active video{display:block;}
+  #scannerTarget{position:absolute;inset:0;width:100%;height:100%;}
+  #scannerTarget video, #scannerTarget canvas{position:absolute;top:0;left:0;width:100% !important;height:100% !important;object-fit:cover;}
+  #scannerTarget canvas{display:none;}
   .scanner-idle{text-align:center;color:var(--text-dim);font-size:13px;padding:20px;}
   .frame{position:absolute;inset:14%;border:2px solid rgba(255,255,255,.25);border-radius:10px;pointer-events:none;display:none;}
   .scanner-view.active .frame{display:block;}
@@ -190,7 +194,7 @@
   <div class="scanner-card">
     <div class="scanner-view" id="scannerView">
       <div class="scanner-idle" id="scannerIdle">Caméra inactive.<br>Appuie sur « Scanner » pour démarrer.</div>
-      <video id="video" playsinline muted></video>
+      <div id="scannerTarget"></div>
       <div class="frame"></div>
       <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
       <div class="laser"></div>
@@ -261,16 +265,12 @@ const CATEGORIES = [
 function catInfo(id){ return CATEGORIES.find(c=>c.id===id) || CATEGORIES[CATEGORIES.length-1]; }
 
 let stock = {};
-let stream = null;
 let scanning = false;
-let detector = null;
-let scanLoopId = null;
 let currentFacing = 'environment';
 let lastDetected = { code:null, time:0 };
 let activeCat = 'all';
 let pending = null; // { code, name, image }
 
-const video = document.getElementById('video');
 const scannerView = document.getElementById('scannerView');
 const scannerIdle = document.getElementById('scannerIdle');
 const toggleScanBtn = document.getElementById('toggleScan');
@@ -523,54 +523,71 @@ listContainer.addEventListener('change',(e)=>{
 
 searchInput.addEventListener('input', renderList);
 
-// ---------- Scanning ----------
-function barcodeSupported(){ return 'BarcodeDetector' in window; }
-
-async function startScan(){
+// ---------- Scanning (QuaggaJS — works on iOS Safari and Android Chrome) ----------
+function startScan(){
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     setStatus('Caméra non disponible sur ce navigateur.', 'err'); return;
   }
-  if(!barcodeSupported()){
-    setStatus('Scan non supporté ici (essaie Chrome sur Android). Utilise l\'ajout manuel.', 'err'); return;
+  if(typeof Quagga === 'undefined'){
+    setStatus('Librairie de scan non chargée. Vérifie ta connexion et recharge la page.', 'err'); return;
   }
-  try{
-    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode: currentFacing } });
-  }catch(e){
-    setStatus('Accès caméra refusé ou indisponible.', 'err'); return;
-  }
-  video.srcObject = stream;
-  await video.play();
-  scannerView.classList.add('active');
-  scannerIdle.style.display = 'none';
-  switchCamBtn.style.display = 'inline-flex';
-  toggleScanBtn.textContent = 'Arrêter le scan';
-  scanning = true;
-  setStatus('Recherche d\'un code-barres…');
-  detector = new BarcodeDetector({ formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'] });
-  scanFrame();
+
+  setStatus('Ouverture de la caméra…');
+
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: document.querySelector('#scannerTarget'),
+      constraints: {
+        facingMode: currentFacing,
+        width: { ideal: 720 },
+        height: { ideal: 540 }
+      }
+    },
+    locator: { patchSize: 'medium', halfSample: true },
+    numOfWorkers: 2,
+    frequency: 10,
+    decoder: {
+      readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader','codabar_reader']
+    },
+    locate: true
+  }, function(err){
+    if(err){
+      console.error(err);
+      setStatus('Accès caméra refusé ou indisponible.', 'err');
+      return;
+    }
+    Quagga.start();
+    scannerView.classList.add('active');
+    scannerIdle.style.display = 'none';
+    switchCamBtn.style.display = 'inline-flex';
+    toggleScanBtn.textContent = 'Arrêter le scan';
+    scanning = true;
+    setStatus('Recherche d\'un code-barres…');
+  });
+
+  Quagga.offDetected(onQuaggaDetected);
+  Quagga.onDetected(onQuaggaDetected);
 }
 
-async function scanFrame(){
-  if(!scanning) return;
-  try{
-    const barcodes = await detector.detect(video);
-    if(barcodes.length>0){
-      const code = barcodes[0].rawValue;
-      const now = Date.now();
-      if(code !== lastDetected.code || now - lastDetected.time > 2500){
-        lastDetected = { code, time: now };
-        setStatus(`Code détecté : ${code}`, 'ok');
-        await handleScannedCode(code);
-      }
-    }
-  }catch(e){}
-  scanLoopId = requestAnimationFrame(scanFrame);
+async function onQuaggaDetected(result){
+  const code = result && result.codeResult && result.codeResult.code;
+  if(!code) return;
+  const now = Date.now();
+  if(code !== lastDetected.code || now - lastDetected.time > 2500){
+    lastDetected = { code, time: now };
+    setStatus(`Code détecté : ${code}`, 'ok');
+    await handleScannedCode(code);
+  }
 }
 
 function stopScan(){
   scanning = false;
-  if(scanLoopId) cancelAnimationFrame(scanLoopId);
-  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  try{
+    Quagga.offDetected(onQuaggaDetected);
+    Quagga.stop();
+  }catch(e){}
   scannerView.classList.remove('active');
   scannerIdle.style.display = 'block';
   switchCamBtn.style.display = 'none';
@@ -579,9 +596,10 @@ function stopScan(){
 }
 
 toggleScanBtn.addEventListener('click', ()=> scanning ? stopScan() : startScan());
-switchCamBtn.addEventListener('click', async ()=>{
+switchCamBtn.addEventListener('click', ()=>{
   currentFacing = currentFacing==='environment' ? 'user' : 'environment';
-  stopScan(); await startScan();
+  stopScan();
+  setTimeout(startScan, 200);
 });
 
 document.getElementById('manualAddBtn').addEventListener('click', ()=>{
