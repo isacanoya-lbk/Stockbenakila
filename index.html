@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Tabac-Presse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12151a;
+    --surface:#1b1f27;
+    --surface-2:#232833;
+    --border:#2c323f;
+    --text:#eef1f5;
+    --text-dim:#8891a1;
+    --laser:#ff4d3d;
+    --laser-glow:rgba(255,77,61,0.35);
+    --ok:#3ddc97;
+    --warn:#ffb648;
+    --danger:#ff5c5c;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-tap-highlight-color:transparent;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  header{
+    padding:20px 16px 14px;
+    border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,#171b22,#12151a);
+  }
+  header .eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;color:var(--laser);text-transform:uppercase;}
+  header h1{margin:4px 0 0;font-size:20px;font-weight:800;letter-spacing:-0.01em;}
+  header p{margin:4px 0 0;color:var(--text-dim);font-size:12.5px;}
+
+  main{max-width:680px;margin:0 auto;padding:14px;padding-bottom:90px;}
+
+  /* Dashboard */
+  .dash{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+  .dash .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 8px;text-align:center;}
+  .dash .card .n{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;}
+  .dash .card .l{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
+  .dash .card.warn .n{color:var(--warn);}
+  .dash .card.danger .n{color:var(--danger);}
+
+  .reorder-btn{
+    width:100%;
+    background:var(--surface-2);
+    border:1px solid var(--warn);
+    color:var(--warn);
+    padding:11px;
+    border-radius:10px;
+    font-weight:600;
+    font-size:13px;
+    margin-bottom:16px;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+
+  /* Scanner */
+  .scanner-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:14px;}
+  .scanner-view{position:relative;width:100%;aspect-ratio:4/3;background:#05070a;display:flex;align-items:center;justify-content:center;}
+  .scanner-view video{width:100%;height:100%;object-fit:cover;display:none;}
+  .scanner-view.active video{display:block;}
+  .scanner-idle{text-align:center;color:var(--text-dim);font-size:13px;padding:20px;}
+  .frame{position:absolute;inset:14%;border:2px solid rgba(255,255,255,.25);border-radius:10px;pointer-events:none;display:none;}
+  .scanner-view.active .frame{display:block;}
+  .laser{position:absolute;left:14%;right:14%;height:2px;background:var(--laser);box-shadow:0 0 10px 2px var(--laser-glow);top:14%;display:none;animation:sweep 1.6s ease-in-out infinite;}
+  .scanner-view.active .laser{display:block;}
+  @keyframes sweep{0%,100%{top:14%;}50%{top:84%;}}
+  .corner{position:absolute;width:22px;height:22px;display:none;}
+  .scanner-view.active .corner{display:block;}
+  .corner.tl{top:12%;left:12%;border-top:3px solid var(--laser);border-left:3px solid var(--laser);border-radius:4px 0 0 0;}
+  .corner.tr{top:12%;right:12%;border-top:3px solid var(--laser);border-right:3px solid var(--laser);border-radius:0 4px 0 0;}
+  .corner.bl{bottom:12%;left:12%;border-bottom:3px solid var(--laser);border-left:3px solid var(--laser);border-radius:0 0 0 4px;}
+  .corner.br{bottom:12%;right:12%;border-bottom:3px solid var(--laser);border-right:3px solid var(--laser);border-radius:0 0 4px 0;}
+  .scanner-controls{padding:14px;display:flex;gap:10px;border-top:1px solid var(--border);}
+  button{font-family:'Inter',sans-serif;font-weight:600;border:none;border-radius:10px;cursor:pointer;transition:transform .08s ease, opacity .15s ease;}
+  button:active{transform:scale(0.97);}
+  .btn-primary{flex:1;background:var(--laser);color:#fff;padding:12px;font-size:14px;}
+  .btn-secondary{background:var(--surface-2);color:var(--text);border:1px solid var(--border);padding:12px 16px;font-size:14px;}
+  .status-line{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-dim);padding:0 14px 12px;}
+  .status-line.err{color:var(--warn);}
+  .status-line.ok{color:var(--ok);}
+
+  /* Pending category picker after scan */
+  .pending-card{background:var(--surface);border:1px solid var(--laser);border-radius:14px;padding:14px;margin-bottom:14px;}
+  .pending-card .ptitle{font-size:12px;color:var(--text-dim);margin-bottom:8px;}
+  .pending-card .pname{font-size:15px;font-weight:700;margin-bottom:10px;}
+  .pending-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .pending-row select, .pending-row input{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:8px;
+    padding:9px 10px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;
+  }
+  .pending-row select{flex:1;min-width:130px;}
+  .pending-row input{width:70px;font-family:'JetBrains Mono',monospace;}
+
+  /* Manual add */
+  .manual-add{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:18px;}
+  .manual-add .label{font-size:11px;letter-spacing:.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px;font-weight:600;}
+  .manual-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .manual-row input, .manual-row select{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;
+  }
+  .manual-row input.mono{font-family:'JetBrains Mono',monospace;}
+  .manual-row input::placeholder{color:#5b6473;}
+  .manual-row input:focus, .manual-row select:focus{outline:none;border-color:var(--laser);}
+  .manual-row input[name="code"]{flex:1;min-width:100px;}
+  .manual-row input[name="name"]{flex:1;min-width:120px;}
+  .manual-row select{min-width:110px;}
+  .manual-row input[name="min"]{width:64px;}
+
+  /* Category chips filter */
+  .cat-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;-ms-overflow-style:none;scrollbar-width:none;}
+  .cat-tabs::-webkit-scrollbar{display:none;}
+  .cat-tab{
+    flex-shrink:0;padding:7px 13px;border-radius:20px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text-dim);font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;
+  }
+  .cat-tab.active{background:var(--text);color:var(--bg);border-color:var(--text);}
+
+  .list-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .list-header h2{font-size:15px;margin:0;font-weight:700;}
+  .list-header .count{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);}
+
+  .search{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;margin-bottom:12px;}
+  .search:focus{outline:none;border-color:var(--laser);}
+
+  .item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
+  .item.low{border-color:var(--danger);}
+  .item-top{display:flex;align-items:center;gap:12px;}
+  .item .thumb{width:36px;height:36px;border-radius:8px;background:var(--surface-2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;overflow:hidden;}
+  .item .thumb img{width:100%;height:100%;object-fit:cover;}
+  .item .info{flex:1;min-width:0;}
+  .item .name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .item .code{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-dim);margin-top:1px;}
+  .qty-ctrl{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+  .qty-btn{width:27px;height:27px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-size:15px;line-height:1;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:0;}
+  .qty-val{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;min-width:20px;text-align:center;}
+  .qty-val.low{color:var(--danger);}
+  .del-btn{background:transparent;color:#5b6473;padding:4px 6px;font-size:15px;}
+  .del-btn:active{color:var(--laser);}
+
+  .item-bottom{display:flex;align-items:center;gap:8px;margin-top:9px;padding-top:9px;border-top:1px solid var(--border);flex-wrap:wrap;}
+  .cat-pill{
+    font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;display:flex;align-items:center;gap:5px;
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+  }
+  .cat-pill .dot{width:7px;height:7px;border-radius:50%;}
+  .cat-select{background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);font-size:11px;border-radius:8px;padding:4px 6px;}
+  .min-edit{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-dim);margin-left:auto;}
+  .min-edit input{width:42px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 5px;text-align:center;}
+  .low-badge{font-size:10.5px;color:var(--danger);font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
+
+  .empty{text-align:center;color:var(--text-dim);font-size:13px;padding:40px 20px;border:1px dashed var(--border);border-radius:12px;}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s ease, bottom .25s ease;z-index:50;max-width:90%;text-align:center;}
+  .toast.show{opacity:1;bottom:32px;}
+
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(5,7,10,.7);display:none;align-items:flex-end;justify-content:center;z-index:100;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:18px 18px 0 0;width:100%;max-width:680px;max-height:80vh;overflow-y:auto;padding:18px;}
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal .sub{color:var(--text-dim);font-size:12px;margin-bottom:14px;}
+  .modal .grp{margin-bottom:14px;}
+  .modal .grp-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;font-weight:700;}
+  .modal .row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13.5px;}
+  .modal .row .need{font-family:'JetBrains Mono',monospace;color:var(--danger);font-weight:700;}
+  .modal-actions{display:flex;gap:10px;margin-top:14px;}
+  .modal-actions button{flex:1;padding:12px;font-size:13.5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Tabac · Presse · Stock</div>
+  <h1>Gestion de stock</h1>
+  <p>Scanne, classe par rayon, repère ce qui manque avant d'acheter.</p>
+</header>
+
+<main>
+  <div class="dash">
+    <div class="card"><div class="n mono" id="dTotal">0</div><div class="l">Références</div></div>
+    <div class="card"><div class="n mono" id="dQty">0</div><div class="l">Quantité totale</div></div>
+    <div class="card danger"><div class="n mono" id="dLow">0</div><div class="l">À racheter</div></div>
+  </div>
+
+  <button class="reorder-btn" id="openReorder">⚠ Voir la liste à racheter</button>
+
+  <div class="scanner-card">
+    <div class="scanner-view" id="scannerView">
+      <div class="scanner-idle" id="scannerIdle">Caméra inactive.<br>Appuie sur « Scanner » pour démarrer.</div>
+      <video id="video" playsinline muted></video>
+      <div class="frame"></div>
+      <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+      <div class="laser"></div>
+    </div>
+    <div class="scanner-controls">
+      <button class="btn-primary" id="toggleScan">Scanner un produit</button>
+      <button class="btn-secondary" id="switchCam" style="display:none;">↺</button>
+    </div>
+    <div class="status-line" id="statusLine">Prêt.</div>
+  </div>
+
+  <div class="pending-card" id="pendingCard" style="display:none;">
+    <div class="ptitle">Nouveau produit détecté — choisis le rayon</div>
+    <div class="pname" id="pendingName">—</div>
+    <div class="pending-row">
+      <select id="pendingCat"></select>
+      <input type="number" id="pendingMin" placeholder="Seuil mini" min="0" value="2">
+      <button class="btn-primary" id="pendingConfirm" style="flex:0 0 auto;padding:9px 16px;">OK</button>
+    </div>
+  </div>
+
+  <div class="manual-add">
+    <div class="label">Ajout manuel</div>
+    <div class="manual-row">
+      <input type="text" name="code" id="manualCode" class="mono" placeholder="Code-barres" inputmode="numeric">
+      <input type="text" name="name" id="manualName" placeholder="Nom du produit">
+      <select name="cat" id="manualCat"></select>
+      <input type="number" name="min" id="manualMin" placeholder="Seuil" min="0" value="2">
+      <button class="btn-secondary" id="manualAddBtn">Ajouter</button>
+    </div>
+  </div>
+
+  <div class="cat-tabs" id="catTabs"></div>
+
+  <div class="list-header">
+    <h2>Stock</h2>
+    <span class="count" id="itemCount">0 article</span>
+  </div>
+  <input type="text" class="search" id="search" placeholder="Rechercher un produit ou un code…">
+
+  <div id="listContainer"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="reorderModal">
+  <div class="modal">
+    <h3>Liste à racheter</h3>
+    <div class="sub">Produits sous leur seuil mini, regroupés par rayon.</div>
+    <div id="reorderContent"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="copyReorder">Copier le texte</button>
+      <button class="btn-primary" id="closeReorder">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'stock-items-tabac';
+const CATEGORIES = [
+  { id:'tabac', label:'Tabac', color:'#b08968' },
+  { id:'alcool', label:'Alcool', color:'#e0a83e' },
+  { id:'cosmetique', label:'Cosmétique', color:'#d17bb5' },
+  { id:'materiel', label:'Matériel cosmétique', color:'#7aa3d1' },
+  { id:'confiserie', label:'Confiserie / Gâteaux', color:'#f2a65a' },
+  { id:'autre', label:'Autre', color:'#8891a1' }
+];
+function catInfo(id){ return CATEGORIES.find(c=>c.id===id) || CATEGORIES[CATEGORIES.length-1]; }
+
+let stock = {};
+let stream = null;
+let scanning = false;
+let detector = null;
+let scanLoopId = null;
+let currentFacing = 'environment';
+let lastDetected = { code:null, time:0 };
+let activeCat = 'all';
+let pending = null; // { code, name, image }
+
+const video = document.getElementById('video');
+const scannerView = document.getElementById('scannerView');
+const scannerIdle = document.getElementById('scannerIdle');
+const toggleScanBtn = document.getElementById('toggleScan');
+const switchCamBtn = document.getElementById('switchCam');
+const statusLine = document.getElementById('statusLine');
+const listContainer = document.getElementById('listContainer');
+const itemCount = document.getElementById('itemCount');
+const searchInput = document.getElementById('search');
+const toast = document.getElementById('toast');
+const catTabs = document.getElementById('catTabs');
+const pendingCard = document.getElementById('pendingCard');
+const pendingName = document.getElementById('pendingName');
+const pendingCat = document.getElementById('pendingCat');
+const pendingMin = document.getElementById('pendingMin');
+const manualCat = document.getElementById('manualCat');
+
+function fillCategorySelects(){
+  const opts = CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join('');
+  pendingCat.innerHTML = opts;
+  manualCat.innerHTML = opts;
+}
+fillCategorySelects();
+
+function renderCatTabs(){
+  const tabs = [{id:'all',label:'Tous'}, ...CATEGORIES];
+  catTabs.innerHTML = tabs.map(t=>`
+    <div class="cat-tab ${activeCat===t.id?'active':''}" data-cat="${t.id}">${t.label}</div>
+  `).join('');
+}
+catTabs.addEventListener('click',(e)=>{
+  const el = e.target.closest('.cat-tab');
+  if(!el) return;
+  activeCat = el.dataset.cat;
+  renderCatTabs();
+  renderList();
+});
+
+function showToast(msg){
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>toast.classList.remove('show'), 2200);
+}
+function setStatus(msg, type){
+  statusLine.textContent = msg;
+  statusLine.className = 'status-line' + (type ? ' '+type : '');
+}
+
+// ---------- Storage ----------
+async function loadStock(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, false);
+    stock = res && res.value ? JSON.parse(res.value) : {};
+  }catch(e){ stock = {}; }
+  // migration: ensure fields exist
+  Object.values(stock).forEach(it=>{
+    if(!it.category) it.category = 'autre';
+    if(typeof it.minQty !== 'number') it.minQty = 2;
+  });
+  renderCatTabs();
+  renderList();
+}
+async function saveStock(){
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify(stock), false);
+  }catch(e){ setStatus('Erreur de sauvegarde locale.', 'err'); }
+}
+
+// ---------- Product lookup ----------
+async function lookupProduct(code){
+  try{
+    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`);
+    const data = await res.json();
+    if(data && data.status === 1 && data.product){
+      return {
+        name: data.product.product_name || data.product.generic_name || null,
+        image: data.product.image_front_small_url || data.product.image_small_url || null
+      };
+    }
+  }catch(e){}
+  return null;
+}
+
+// ---------- Add flow ----------
+async function handleScannedCode(code){
+  code = String(code).trim();
+  if(!code) return;
+
+  if(stock[code]){
+    stock[code].qty += 1;
+    await saveStock();
+    renderList();
+    updateDash();
+    showToast(`+1 · ${stock[code].name} (${stock[code].qty})`);
+    return;
+  }
+
+  setStatus('Recherche du produit…');
+  const info = await lookupProduct(code);
+  const name = (info && info.name) ? info.name : `Produit ${code.slice(-6)}`;
+  pending = { code, name, image: info ? info.image : null };
+  pendingName.textContent = name;
+  pendingMin.value = 2;
+  pendingCard.style.display = 'block';
+  setStatus('Choisis le rayon du nouveau produit.', 'ok');
+}
+
+document.getElementById('pendingConfirm').addEventListener('click', async ()=>{
+  if(!pending) return;
+  const category = pendingCat.value;
+  const minQty = parseInt(pendingMin.value) || 0;
+  stock[pending.code] = {
+    name: pending.name, code: pending.code, qty:1, category, minQty,
+    image: pending.image, addedAt: Date.now()
+  };
+  await saveStock();
+  pending = null;
+  pendingCard.style.display = 'none';
+  renderList();
+  updateDash();
+  setStatus('Prêt.');
+  showToast('Produit ajouté au stock.');
+});
+
+async function addManual(code, name, category, minQty){
+  code = String(code).trim();
+  if(!code){ showToast('Code-barres vide.'); return; }
+  if(stock[code]){
+    stock[code].qty += 1;
+    await saveStock(); renderList(); updateDash();
+    showToast(`+1 · ${stock[code].name} (${stock[code].qty})`);
+    return;
+  }
+  let finalName = name && name.trim();
+  let image = null;
+  if(!finalName){
+    const info = await lookupProduct(code);
+    finalName = (info && info.name) ? info.name : `Produit ${code.slice(-6)}`;
+    image = info ? info.image : null;
+  }
+  stock[code] = { name: finalName, code, qty:1, category: category||'autre', minQty: minQty||0, image, addedAt: Date.now() };
+  await saveStock(); renderList(); updateDash();
+  showToast(`Ajouté · ${finalName}`);
+}
+
+async function changeQty(code, delta){
+  if(!stock[code]) return;
+  stock[code].qty += delta;
+  if(stock[code].qty <= 0) delete stock[code];
+  await saveStock(); renderList(); updateDash();
+}
+async function removeItem(code){
+  delete stock[code];
+  await saveStock(); renderList(); updateDash();
+}
+async function updateCategory(code, category){
+  if(!stock[code]) return;
+  stock[code].category = category;
+  await saveStock(); renderList();
+}
+async function updateMin(code, val){
+  if(!stock[code]) return;
+  stock[code].minQty = Math.max(0, parseInt(val)||0);
+  await saveStock(); renderList(); updateDash();
+}
+
+// ---------- Dashboard ----------
+function updateDash(){
+  const items = Object.values(stock);
+  const total = items.length;
+  const totalQty = items.reduce((s,it)=>s+it.qty,0);
+  const low = items.filter(it=>it.qty <= it.minQty).length;
+  document.getElementById('dTotal').textContent = total;
+  document.getElementById('dQty').textContent = totalQty;
+  document.getElementById('dLow').textContent = low;
+}
+
+// ---------- Render list ----------
+function renderList(){
+  const q = searchInput.value.trim().toLowerCase();
+  let items = Object.values(stock);
+  if(activeCat !== 'all') items = items.filter(it=>it.category===activeCat);
+  items = items.filter(it => !q || it.name.toLowerCase().includes(q) || it.code.includes(q));
+  items.sort((a,b)=>{
+    const aLow = a.qty <= a.minQty, bLow = b.qty <= b.minQty;
+    if(aLow !== bLow) return aLow ? -1 : 1;
+    return b.addedAt - a.addedAt;
+  });
+
+  itemCount.textContent = `${items.length} article${items.length>1?'s':''}`;
+
+  if(items.length === 0){
+    listContainer.innerHTML = `<div class="empty">Aucun article ici. Scanne ou ajoute un produit.</div>`;
+    return;
+  }
+
+  const catOptions = CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join('');
+
+  listContainer.innerHTML = items.map(it=>{
+    const low = it.qty <= it.minQty;
+    const ci = catInfo(it.category);
+    return `
+    <div class="item ${low?'low':''}">
+      <div class="item-top">
+        <div class="thumb">${it.image ? `<img src="${it.image}" alt="">` : '📦'}</div>
+        <div class="info">
+          <div class="name">${escapeHtml(it.name)}</div>
+          <div class="code mono">${escapeHtml(it.code)}</div>
+        </div>
+        <div class="qty-ctrl">
+          <button class="qty-btn" data-action="dec" data-code="${it.code}">−</button>
+          <span class="qty-val ${low?'low':''} mono">${it.qty}</span>
+          <button class="qty-btn" data-action="inc" data-code="${it.code}">+</button>
+        </div>
+        <button class="del-btn" data-action="del" data-code="${it.code}">✕</button>
+      </div>
+      <div class="item-bottom">
+        <select class="cat-select" data-code="${it.code}" data-action="cat">${
+          CATEGORIES.map(c=>`<option value="${c.id}" ${c.id===it.category?'selected':''}>${c.label}</option>`).join('')
+        }</select>
+        <div class="min-edit">
+          seuil
+          <input type="number" min="0" value="${it.minQty}" data-code="${it.code}" data-action="min">
+        </div>
+        ${low ? '<span class="low-badge">À racheter</span>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+listContainer.addEventListener('click',(e)=>{
+  const btn = e.target.closest('button[data-action]');
+  if(!btn) return;
+  const code = btn.dataset.code, action = btn.dataset.action;
+  if(action==='inc') changeQty(code,1);
+  else if(action==='dec') changeQty(code,-1);
+  else if(action==='del') removeItem(code);
+});
+listContainer.addEventListener('change',(e)=>{
+  const el = e.target;
+  if(el.dataset.action==='cat') updateCategory(el.dataset.code, el.value);
+  else if(el.dataset.action==='min') updateMin(el.dataset.code, el.value);
+});
+
+searchInput.addEventListener('input', renderList);
+
+// ---------- Scanning ----------
+function barcodeSupported(){ return 'BarcodeDetector' in window; }
+
+async function startScan(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    setStatus('Caméra non disponible sur ce navigateur.', 'err'); return;
+  }
+  if(!barcodeSupported()){
+    setStatus('Scan non supporté ici (essaie Chrome sur Android). Utilise l\'ajout manuel.', 'err'); return;
+  }
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode: currentFacing } });
+  }catch(e){
+    setStatus('Accès caméra refusé ou indisponible.', 'err'); return;
+  }
+  video.srcObject = stream;
+  await video.play();
+  scannerView.classList.add('active');
+  scannerIdle.style.display = 'none';
+  switchCamBtn.style.display = 'inline-flex';
+  toggleScanBtn.textContent = 'Arrêter le scan';
+  scanning = true;
+  setStatus('Recherche d\'un code-barres…');
+  detector = new BarcodeDetector({ formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'] });
+  scanFrame();
+}
+
+async function scanFrame(){
+  if(!scanning) return;
+  try{
+    const barcodes = await detector.detect(video);
+    if(barcodes.length>0){
+      const code = barcodes[0].rawValue;
+      const now = Date.now();
+      if(code !== lastDetected.code || now - lastDetected.time > 2500){
+        lastDetected = { code, time: now };
+        setStatus(`Code détecté : ${code}`, 'ok');
+        await handleScannedCode(code);
+      }
+    }
+  }catch(e){}
+  scanLoopId = requestAnimationFrame(scanFrame);
+}
+
+function stopScan(){
+  scanning = false;
+  if(scanLoopId) cancelAnimationFrame(scanLoopId);
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  scannerView.classList.remove('active');
+  scannerIdle.style.display = 'block';
+  switchCamBtn.style.display = 'none';
+  toggleScanBtn.textContent = 'Scanner un produit';
+  setStatus('Prêt.');
+}
+
+toggleScanBtn.addEventListener('click', ()=> scanning ? stopScan() : startScan());
+switchCamBtn.addEventListener('click', async ()=>{
+  currentFacing = currentFacing==='environment' ? 'user' : 'environment';
+  stopScan(); await startScan();
+});
+
+document.getElementById('manualAddBtn').addEventListener('click', ()=>{
+  const code = document.getElementById('manualCode').value;
+  const name = document.getElementById('manualName').value;
+  const cat = manualCat.value;
+  const min = parseInt(document.getElementById('manualMin').value)||0;
+  if(!code.trim()){ showToast('Entre un code-barres.'); return; }
+  addManual(code, name, cat, min);
+  document.getElementById('manualCode').value='';
+  document.getElementById('manualName').value='';
+});
+document.getElementById('manualCode').addEventListener('keydown',(e)=>{
+  if(e.key==='Enter') document.getElementById('manualAddBtn').click();
+});
+
+// ---------- Reorder modal ----------
+const reorderModal = document.getElementById('reorderModal');
+const reorderContent = document.getElementById('reorderContent');
+
+function buildReorderText(){
+  const low = Object.values(stock).filter(it=>it.qty<=it.minQty);
+  if(low.length===0) return null;
+  const byCat = {};
+  low.forEach(it=>{
+    const c = catInfo(it.category).label;
+    byCat[c] = byCat[c] || [];
+    byCat[c].push(it);
+  });
+  return byCat;
+}
+
+document.getElementById('openReorder').addEventListener('click', ()=>{
+  const byCat = buildReorderText();
+  if(!byCat){
+    reorderContent.innerHTML = `<div class="empty">Rien à racheter pour l'instant. Tout est au-dessus du seuil.</div>`;
+  }else{
+    reorderContent.innerHTML = Object.entries(byCat).map(([cat, items])=>`
+      <div class="grp">
+        <div class="grp-title">${cat}</div>
+        ${items.map(it=>`
+          <div class="row">
+            <span>${escapeHtml(it.name)}</span>
+            <span class="need">${it.qty}/${it.minQty}</span>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+  }
+  reorderModal.classList.add('show');
+});
+document.getElementById('closeReorder').addEventListener('click', ()=> reorderModal.classList.remove('show'));
+reorderModal.addEventListener('click', (e)=>{ if(e.target===reorderModal) reorderModal.classList.remove('show'); });
+
+document.getElementById('copyReorder').addEventListener('click', async ()=>{
+  const byCat = buildReorderText();
+  if(!byCat){ showToast('Rien à copier.'); return; }
+  let text = 'Liste à racheter :\n\n';
+  Object.entries(byCat).forEach(([cat, items])=>{
+    text += `${cat}\n`;
+    items.forEach(it=> text += `- ${it.name} (stock ${it.qty}, seuil ${it.minQty})\n`);
+    text += '\n';
+  });
+  try{
+    await navigator.clipboard.writeText(text);
+    showToast('Liste copiée dans le presse-papiers.');
+  }catch(e){
+    showToast('Impossible de copier automatiquement.');
+  }
+});
+
+// ---------- Init ----------
+loadStock().then(updateDash);
+</script>
+</body>
+</html>
